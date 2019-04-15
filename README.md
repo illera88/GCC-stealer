@@ -12,8 +12,8 @@ vcpkg install openssl-windows:x86-windows-static
 cd GCC-stealer
 mkdir build_x86
 cd build_x86
-cmake -G "Visual Studio 16 2019" -DCMAKE_TOOLCHAIN_FILE=C:/Users/alberto.garcia/Documents/code/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x86-windows-static ..
-make
+cmake -G "Visual Studio 16 2019" -A Win32 -DCMAKE_TOOLCHAIN_FILE=C:/Users/alberto.garcia/Documents/code/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x86-windows-static ..
+cmake --build . --config Release
 ```
 
 If you are using `CMakeGUI` make sure you set the path to `vcpkg.cmake` on `Specify toolchain file for cross-compiling`:
