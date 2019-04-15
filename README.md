@@ -16,9 +16,11 @@ cmake -DCMAKE_TOOLCHAIN_FILE=C:/Users/alberto.garcia/Documents/code/vcpkg/script
 make
 ```
 
-If you are using `CMakeGUI` make sure you set the `CMAKE_TOOLCHAIN_FILE` parameter in this window:
+If you are using `CMakeGUI` make sure you set the path to `vcpkg.cmake` on `Specify toolchain file for cross-compiling`:
 
-and set the `VCPKG_TARGET_TRIPLET` variable before clicking `configure`.
+![image cmake](https://user-images.githubusercontent.com/30894796/56062802-eb2e2880-5d6d-11e9-990a-1f04d8904d03.png)
+
+and set the `VCPKG_TARGET_TRIPLET` variable **before** clicking `Configure` in the GUI.
 
 # Compilation for Linux
 ```
@@ -41,3 +43,4 @@ cd build
 cmake -DCMAKE_TOOLCHAIN_FILE=~/vcpkg/scripts/buildsystems/vcpkg.cmake ..
 make
 ```
+``
