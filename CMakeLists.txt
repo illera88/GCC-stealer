@@ -19,8 +19,6 @@ else()
 	add_executable(GCC-stealer ${GCC-stealer_SOURCE_FILES})
 endif()
 
-add_executable(GCC-stealer ${GCC-stealer_SOURCE_FILES})
-
 target_link_libraries(GCC-stealer PRIVATE sqlite3)
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
