@@ -19,6 +19,8 @@ echo "Installing vcpkg and dependencies"
     # OpenSSL dependencies
     apk add --no-cache linux-headers perl pkgconf
 
+    # gettext deps
+    apk add --no-cache musl-libintl
     cd /tmp
 	git clone https://github.com/Microsoft/vcpkg.git
 	cd vcpkg
