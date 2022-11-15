@@ -1,40 +1,57 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.20)
 project(GCC-stealer)
 
-find_package(sqlite3 CONFIG REQUIRED)
-
-if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-	find_package(OpenSSL REQUIRED)
+if (!CMAKE_TOOLCHAIN_FILE)
+    message(FATAL_ERROR "Use vcpkg along with -DCMAKE_TOOLCHAIN_FILE=[vcpkg-root]/scripts/buildsystems/vcpkg.cmake")
 endif()
 
-	
-set(GCC-stealer_SOURCE_FILES 
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
+
+if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+    find_package(OpenSSL REQUIRED)
+endif()
+
+set(GCC-stealer_SOURCE_FILES
     src/GCC-stealer.cpp
 )
 
+set(BUILD_SHARED_LIBS OFF)
+set(CMAKE_EXE_LINKER_FLAGS "-static")
+
 if((${CMAKE_SYSTEM_NAME} MATCHES "Windows") AND (${CMAKE_BUILD_TYPE} MATCHES "Release"))
     #WIN32 option to hide console: https://cmake.org/pipermail/cmake/2003-July/004047.html
-	add_executable(GCC-stealer WIN32 ${GCC-stealer_SOURCE_FILES})
+    add_executable(GCC-stealer WIN32 ${GCC-stealer_SOURCE_FILES})
+        
 else()
-	add_executable(GCC-stealer ${GCC-stealer_SOURCE_FILES})
+    add_executable(GCC-stealer ${GCC-stealer_SOURCE_FILES})
 endif()
 
-target_link_libraries(GCC-stealer PRIVATE sqlite3)
+target_compile_features(GCC-stealer PRIVATE cxx_std_17)
+
+target_link_libraries(GCC-stealer PRIVATE unofficial::sqlite3::sqlite3)
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /MP")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MT /MP")
-	set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT GCC-stealer)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT GCC-stealer)
 elseif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-    target_include_directories(GCC-stealer PRIVATE "/usr/include/libsecret-1/")
-    target_include_directories(GCC-stealer PRIVATE "/usr/include/glib-2.0")
-    target_include_directories(GCC-stealer PRIVATE "/usr/lib/x86_64-linux-gnu/glib-2.0/include")
+    # find_package(PkgConfig REQUIRED)
+    # pkg_check_modules(Libsecret REQUIRED IMPORTED_TARGET libsecret-1)
 
+    target_include_directories(GCC-stealer PRIVATE ${LIBSECRET_INCLUDE_DIRS})
+
+    # Get the path where the vcpkg installed libs live
+    get_filename_component(VCPKG_LIBS_PATH ${OPENSSL_SSL_LIBRARY} DIRECTORY)
+
+    target_include_directories(GCC-stealer PRIVATE "${OPENSSL_INCLUDE_DIR}/libsecret-1/")
+    target_include_directories(GCC-stealer PRIVATE "${OPENSSL_INCLUDE_DIR}/glib-2.0")
+    target_include_directories(GCC-stealer PRIVATE "${VCPKG_LIBS_PATH}/glib-2.0/include")
+
+    #message(STATUS ${LIBSECRET_LIBRARIES})
     target_link_libraries(GCC-stealer PRIVATE OpenSSL::SSL OpenSSL::Crypto)
-    target_link_libraries(GCC-stealer PRIVATE glib-2.0)
-    target_link_libraries(GCC-stealer PRIVATE secret-1)
-    target_link_libraries(GCC-stealer PRIVATE stdc++fs)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_RELEASE} -std=c++17")
+    #target_link_libraries(GCC-stealer PRIVATE PkgConfig::Libsecret)
+
+    target_link_directories(GCC-stealer PRIVATE ${VCPKG_LIBS_PATH})
+    target_link_libraries(GCC-stealer PRIVATE secret-1 gcrypt  gpg-error stdc++fs dl gio-2.0 pthread z gmodule-2.0 gobject-2.0 glib-2.0 pcre2-8 ffi intl)
 elseif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     # ToDo
 endif()
@@ -46,4 +63,3 @@ if (MSVC_VERSION GREATER_EQUAL "1900")
         target_compile_options(GCC-stealer PUBLIC "/std:c++latest")
     endif()
 endif()
-

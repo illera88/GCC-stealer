@@ -1,9 +1,4 @@
-#ifdef _WIN32
 #include <filesystem>
-#else //Still experimental for gcc
-#include <experimental/filesystem>
-#endif
-#include <sqlite3.h>  
 #include <tuple>
 #include <vector>
 #include <list>
@@ -11,19 +6,21 @@
 #include <iostream> 
 #include <memory>
 
+#include <sqlite3.h>  
+
 #ifdef _WIN32
-#include <Windows.h>
-#include <Lmcons.h>
-#pragma comment(lib, "ws2_32.lib")
-#pragma comment (lib, "crypt32")
-#define ITERATION     1 
+    #include <Windows.h>
+    #include <Lmcons.h>
+    #pragma comment(lib, "ws2_32.lib")
+    #pragma comment (lib, "crypt32")
+    #define ITERATION     1 
 #elif __APPLE_
-#define ITERATION     1003 
+    #define ITERATION     1003 
 #elif __linux__
-#define ITERATION     1 
-#include <libsecret/secret.h>
-#include <string>
-#include <list>
+    #define ITERATION     1 
+    #include <libsecret/secret.h>
+    #include <string>
+    #include <list>
 #endif // _WIN32
 
 
@@ -334,11 +331,8 @@ int main(int argc, char** argv) {
     snprintf(cookies_path, PATH_MAX, "%s/.config/google-chrome/Default/Cookies", home);
 #endif //_WIN32
 
-#ifdef _WIN32
     std::filesystem::copy(cookies_path, "Cookies_decrypted", std::filesystem::copy_options::overwrite_existing);
-#else
-    std::experimental::filesystem::copy(cookies_path, "Cookies_decrypted", std::experimental::filesystem::copy_options::overwrite_existing);
-#endif
+
     auto cookies_vector = get_encrypted_cookies_vector(cookies_path);
     
     if (cookies_vector.empty()) {

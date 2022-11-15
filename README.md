@@ -22,6 +22,33 @@ If you are using `CMakeGUI` make sure you set the path to `vcpkg.cmake` on `Spec
 
 and set the `VCPKG_TARGET_TRIPLET` variable **before** clicking `Configure` in the GUI.
 
+# Compilation for Alpine
+Alpine uses `musl` so everything is compiled statically which is great for portability
+```
+# Install dependencies not available with vcpkg
+sudo apk add build-base cmake zip unzip curl git m4 automake linux-headers
+
+# Install ninja >=1.10.2 (needed to build Glib)
+git clone https://github.com/ninja-build/ninja
+cd ninja
+cmake -Bbuild-cmake
+cmake --build build-cmake
+sudo cp build-cmake/ninja /usr/bin/ninja
+
+# Install dependencies with vcpkg (static)
+cd ~/
+git clone https://github.com/Microsoft/vcpkg.git
+cd vcpkg
+./bootstrap-vcpkg.sh
+VCPKG_FORCE_SYSTEM_BINARIES=1 ./vcpkg install libsecret sqlite3 openssl
+
+# Configure and compile project
+cd ~/GCC-stealer
+cmake -Bbuild_dir
+cmake --build build_dir -DCMAKE_TOOLCHAIN_FILE=~/vcpkg/scripts/buildsystems/vcpkg.cmake ..
+make
+```
+
 # Compilation for Linux
 ```
 # Install dependencies not available with vcpkg
@@ -43,4 +70,4 @@ cd build
 cmake -DCMAKE_TOOLCHAIN_FILE=~/vcpkg/scripts/buildsystems/vcpkg.cmake ..
 make
 ```
-``
+

