@@ -20,7 +20,7 @@ echo "Installing vcpkg and dependencies"
     apk add --no-cache linux-headers perl pkgconf
 
     # gettext deps
-    apk add --no-cache musl-libintl
+    apk add --no-cache musl-libintl gettext-static
     cd /tmp
 	git clone https://github.com/Microsoft/vcpkg.git
 	cd vcpkg
