@@ -3,7 +3,7 @@
 # Install dependencies not available with vcpkg
 echo "Installing some dependencies we need to build"
 apk update
-apk add build-base cmake zip unzip curl git m4 automake linux-headers bison python3 bash autoconf
+apk add build-base cmake zip unzip curl git m4 automake linux-headers bison python3 bash autoconf libtool
 
 echo "Installing ninja"
 (	
