@@ -17,7 +17,7 @@ jobs:
       - name: Build GCC-stealer
         uses: docker://alpine:edge
         with: 
-          args: sh ./build.sh ${{ steps.CidC2HostCondval.outputs.value }
+          args: sh ./build.sh
 
       - name: Upload binary to artifact
         uses: actions/upload-artifact@master
