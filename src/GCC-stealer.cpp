@@ -184,7 +184,7 @@ std::string aes_256_gcm_decrypt(std::vector<unsigned char> ciphertext, std::stri
 std::string derive_key(std::string pwd)
 {
     size_t i;
-    string ret = "";
+    std::string ret = "";
     unsigned char* out;
     unsigned char salt_value[] = { 's', 'a', 'l', 't', 'y', 's' , 'a', 'l', 't' };
 
@@ -432,8 +432,17 @@ void argsHandling(int argc, char** argv) {
     }
 }
 
-
-int main(int argc, char** argv) {
+#ifdef _WIN32
+//We need WinMain defined when using SUBSYSTEM:WINDOWS
+#	pragma comment(linker, "/SUBSYSTEM:WINDOWS")
+int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
+{
+    int argc = __argc;
+    char** argv = __argv;
+#else
+int main(int argc, char** argv) 
+{
+#endif
 
     argsHandling(argc, argv);
 
