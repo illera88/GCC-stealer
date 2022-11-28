@@ -15,10 +15,6 @@ jobs:
         with:
             submodules: true
       
-      - name: delete
-        run: |
-          ls -lha
-      
       - name: Build GCC-stealer
         uses: docker://alpine:edge
         with: 

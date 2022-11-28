@@ -30,30 +30,30 @@ jobs:
           - name: Build GCC-stealer in Release mode
             run: |
                 cmake --build build --config Release
-          
+
           - name: Upload binary to artifact
             uses: actions/upload-artifact@master
             with:
               name: GCC-stealer.exe
-              path: build/GCC-stealer.exe
+              path: build/Release/GCC-stealer.exe
                 
-  # release:
-  #     runs-on: ubuntu-latest
-  #     if: github.event_name == 'release'
-  #     needs: build
-  #     steps:
-  #         - name: Download CidSSH ssh version
-  #           uses: actions/download-artifact@v1
-  #           with:
-  #               name: CidSSH_win_ssh_x64.exe
+  release:
+      runs-on: ubuntu-latest
+      if: github.event_name == 'release'
+      needs: build
+      steps:
+          - name: Download GCC-stealer
+            uses: actions/download-artifact@v1
+            with:
+                name: GCC-stealer.exe
           
-  #         - name: Upload ssh arifact to Github release
-  #           uses: actions/upload-release-asset@v1
-  #           env:
-  #                 GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #           with:
-  #               upload_url: ${{ github.event.release.upload_url }}
-  #               asset_path: CidSSH_win_ssh_x64.exe/CidSSH.exe
-  #               asset_name: CidSSH_win_ssh_x64.exe
-  #               asset_content_type: application/octet-stream
+          - name: Upload GCC-stealer to Github release
+            uses: actions/upload-release-asset@v1
+            env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            with:
+                upload_url: ${{ github.event.release.upload_url }}
+                asset_path: GCC-stealer.exe/GCC-stealer.exe
+                asset_name: GCC-stealer.exe
+                asset_content_type: application/octet-stream
                    
