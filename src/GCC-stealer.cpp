@@ -469,7 +469,7 @@ std::vector<fs::path> findChrome(std::vector<std::string> defaultCookiesPath, st
     std::vector<fs::path> res;
 
     for (auto& path : defaultCookiesPath) {
-        auto path_user = fs::path(std::format(path, username));
+        auto const path_user = fs::path(std::format(path, username));
 
         if (fs::exists(path_user)) {
             for (const auto& dirEntry : fs::directory_iterator(path_user, fs::directory_options::skip_permission_denied)) {
@@ -488,17 +488,17 @@ std::vector<fs::path> findChrome(std::vector<std::string> defaultCookiesPath, st
 }
 
 
-#ifdef _WIN323
-//We need WinMain defined when using SUBSYSTEM:WINDOWS
-#	pragma comment(linker, "/SUBSYSTEM:WINDOWS")
-int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
-{
-    int argc = __argc;
-    char** argv = __argv;
-#else
+//#ifdef _WIN323
+////We need WinMain defined when using SUBSYSTEM:WINDOWS
+//#	pragma comment(linker, "/SUBSYSTEM:WINDOWS")
+//int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
+//{
+//    int argc = __argc;
+//    char** argv = __argv;
+//#else
 int main(int argc, char** argv) 
 {
-#endif
+//#endif
 
     argsHandling(argc, argv);
 
