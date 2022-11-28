@@ -181,7 +181,7 @@ std::string aes_256_gcm_decrypt(std::vector<unsigned char> ciphertext, std::stri
 
 
 #ifndef _WIN32
-string derive_key(string pwd)
+std::string derive_key(string pwd)
 {
     size_t i;
     string ret = "";
@@ -311,7 +311,7 @@ std::string get_key() {
 
     SecretValue * password_libsecret = ToSingleSecret(results_);
     if (password_libsecret == nullptr) {
-        std::cerr < "[!] Error accessing gnome keyring. Is the user logged in (check who)?\n" << std::endl;
+        std::cerr << "[!] Error accessing gnome keyring. Is the user logged in (check who)?\n" << std::endl;
         return "";
     }
 
@@ -321,7 +321,6 @@ std::string get_key() {
     printf("The Key is %s\n", key.c_str());
 
     // Derive key to get encryption key
-    //auto derived_key = derive_key(key);
     auto derived_key = derive_key(key);
 
     if (derived_key.empty()) {
