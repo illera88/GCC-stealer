@@ -489,18 +489,8 @@ std::vector<fs::path> findChrome(std::vector<std::string> defaultCookiesPath, st
 }
 
 
-//#ifdef _WIN323
-////We need WinMain defined when using SUBSYSTEM:WINDOWS
-//#	pragma comment(linker, "/SUBSYSTEM:WINDOWS")
-//int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
-//{
-//    int argc = __argc;
-//    char** argv = __argv;
-//#else
 int main(int argc, char** argv) 
 {
-//#endif
-
     argsHandling(argc, argv);
 
 #ifdef _WIN32
