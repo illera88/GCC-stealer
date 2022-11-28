@@ -17,8 +17,12 @@ jobs:
                   
           - name: Set triplet to only build release
             run: |
-                "`r`nset(VCPKG_BUILD_TYPE release)" | Add-Content "$env:VCPKG_INSTALLATION_ROOT\triplets\x64-windows-static.cmake"
-                
+                  cd $env:VCPKG_INSTALLATION_ROOT
+                  git reset --hard
+                  git pull
+                  ".\bootstrap-vcpkg.bat"
+                  "`r`nset(VCPKG_BUILD_TYPE release)" | Add-Content "$env:VCPKG_INSTALLATION_ROOT\triplets\x64-windows-static.cmake"
+          
           - name: Install deps with vcpkg
             run: |
                 vcpkg install --triplet x64-windows-static sqlite3 openssl jsoncons argparse

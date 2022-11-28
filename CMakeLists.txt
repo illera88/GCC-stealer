@@ -10,7 +10,7 @@ if (!CMAKE_TOOLCHAIN_FILE)
     message(FATAL_ERROR "Use vcpkg along with -DCMAKE_TOOLCHAIN_FILE=[vcpkg-root]/scripts/buildsystems/vcpkg.cmake")
 endif()
 
-find_package(sqlite3 CONFIG REQUIRED)
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(jsoncons CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(argparse CONFIG REQUIRED)
