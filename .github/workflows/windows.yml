@@ -17,19 +17,15 @@ jobs:
                   
           - name: Set triplet to only build release
             run: |
-                  cd $env:VCPKG_INSTALLATION_ROOT
-                  git reset --hard
-                  git pull
-                  ".\bootstrap-vcpkg.bat"
                   "`r`nset(VCPKG_BUILD_TYPE release)" | Add-Content "$env:VCPKG_INSTALLATION_ROOT\triplets\x64-windows-static.cmake"
           
           - name: Install deps with vcpkg
             run: |
-                vcpkg install --triplet x64-windows-static sqlite3 openssl jsoncons argparse
+                vcpkg install --triplet x64-windows-static openssl jsoncons argparse sqlite3
           
           - name: Create GCC-stealer version
             run: |
-                cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_BUILD_TYPE=Release
+                cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET="x64-windows-static" -DCMAKE_BUILD_TYPE=Release
      
           - name: Build GCC-stealer in Release mode
             run: |
