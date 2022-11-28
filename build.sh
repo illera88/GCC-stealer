@@ -26,7 +26,7 @@ echo "Installing vcpkg and dependencies"
 	cd vcpkg
 	echo "set(VCPKG_BUILD_TYPE release)" >> /tmp/vcpkg/triplets/x64-linux.cmake
 	./bootstrap-vcpkg.sh -disableMetrics
-	VCPKG_FORCE_SYSTEM_BINARIES=1 ./vcpkg install libsecret sqlite3 openssl json argparse --triplet x64-linux
+	VCPKG_FORCE_SYSTEM_BINARIES=1 ./vcpkg install libsecret sqlite3 openssl jsoncons argparse --triplet x64-linux
 )
 
 # Configure and compile project

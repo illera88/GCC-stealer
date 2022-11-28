@@ -8,6 +8,9 @@ endif()
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(jsoncons CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(argparse CONFIG REQUIRED)
+
+
 
 set(GCC-stealer_SOURCE_FILES
     src/GCC-stealer.cpp
@@ -29,6 +32,7 @@ target_compile_features(GCC-stealer PRIVATE cxx_std_17)
 
 target_link_libraries(GCC-stealer PRIVATE unofficial::sqlite3::sqlite3 jsoncons)
 target_link_libraries(GCC-stealer PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(GCC-stealer PRIVATE argparse::argparse)
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
