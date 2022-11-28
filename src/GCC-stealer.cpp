@@ -197,7 +197,7 @@ std::string derive_key(std::string pwd)
     if (PKCS5_PBKDF2_HMAC_SHA1(pwd.c_str(), pwd.size(), salt_value, sizeof(salt_value), ITERATION, KEY_LEN, out) != 0)
     {
         printf("out: "); for (i = 0; i < KEY_LEN; i++) { printf("%02x", out[i]); } printf("\n");
-        ret = string((char*)out, KEY_LEN);
+        ret = std::string((char*)out, KEY_LEN);
     }
     else
     {
