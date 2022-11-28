@@ -116,7 +116,7 @@ cookie_vector_t get_encrypted_cookies_vector(const char* db_path) {
             std::vector<unsigned char> encrypted_value(p, p + size);
 
             std::string signature(encrypted_value.begin(), encrypted_value.begin() + 3);
-            if (signature == "v10") { // Windows
+            if (signature == "v10" || signature == "v11") {
                 encrypted_value.erase(encrypted_value.begin(), encrypted_value.begin() + 3);
                 sol_vector.push_back(make_tuple(host_key, cookie_name, encrypted_value, ""));
             }
