@@ -6,7 +6,6 @@
 #include <iostream> 
 #include <memory>
 #include <fstream>
-#include <format>
 
 #include <sqlite3.h>
 #include <jsoncons/json.hpp>
@@ -16,6 +15,7 @@
 #ifdef _WIN32
     #include "base64.hpp"
     #include <Windows.h>
+    #include <format>
     #include <Lmcons.h>
     #pragma comment(lib, "ws2_32.lib")
     #pragma comment (lib, "crypt32")
@@ -468,9 +468,9 @@ void argsHandling(int argc, char** argv) {
 std::vector<fs::path> findChrome(std::vector<std::string> defaultCookiesPath, std::string username) {
     std::vector<fs::path> res;
 
-    for (auto& path : defaultCookiesPath) {
+    for (auto const& path : defaultCookiesPath) {
 #ifdef _WIN32
-        auto path_user = std::format(path, username);
+        auto const path_user = std::format(path, username);
 #else
         char path_user[PATH_MAX] = { 0 };
         snprintf(path_user, PATH_MAX, path, username);
