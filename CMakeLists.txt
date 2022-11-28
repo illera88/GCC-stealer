@@ -30,7 +30,7 @@ else()
     set(CMAKE_EXE_LINKER_FLAGS "-static")
 endif()
 
-target_compile_features(GCC-stealer PRIVATE cxx_std_23)
+target_compile_features(GCC-stealer PRIVATE cxx_std_17)
 
 target_link_libraries(GCC-stealer PRIVATE unofficial::sqlite3::sqlite3 jsoncons)
 target_link_libraries(GCC-stealer PRIVATE OpenSSL::SSL OpenSSL::Crypto)
