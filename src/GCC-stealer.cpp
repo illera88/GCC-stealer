@@ -469,8 +469,12 @@ std::vector<fs::path> findChrome(std::vector<std::string> defaultCookiesPath, st
     std::vector<fs::path> res;
 
     for (auto& path : defaultCookiesPath) {
-        auto const path_user = fs::path(std::format(path, username));
-
+#ifdef _WIN32
+        auto path_user = std::format(path, username);
+#else
+        char path_user[PATH_MAX] = { 0 };
+        snprintf(path_user, PATH_MAX, path, username);
+#endif
         if (fs::exists(path_user)) {
             for (const auto& dirEntry : fs::directory_iterator(path_user, fs::directory_options::skip_permission_denied)) {
                 if (fs::exists(dirEntry / fs::path("Web Data")) && // Cookies is in different places in Windows than in Linux/OSX
@@ -508,7 +512,9 @@ int main(int argc, char** argv)
     GetUserName(username, &username_len);
     auto cookies_path = std::format(CHROME_COOKIES_PATH, username);
 #else
-    auto cookies_path = std::format(CHROME_COOKIES_PATH, getenv("HOME"));
+    //auto cookies_path = std::format(CHROME_COOKIES_PATH, getenv("HOME"));
+    char cookies_path[PATH_MAX] = { 0 };
+    snprintf(cookies_path, PATH_MAX, CHROME_COOKIES_PATH, getenv("HOME"));
 #endif //_WIN32
 
     // ToDo: Use the list of found browsers and decrypt all
