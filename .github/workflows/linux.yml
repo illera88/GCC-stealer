@@ -42,6 +42,6 @@ jobs:
                 GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           with:
               upload_url: ${{ github.event.release.upload_url }}
-              asset_path: GCC-stealer.exe/GCC-stealer
+              asset_path: GCC-stealer/GCC-stealer
               asset_name: GCC-stealer
               asset_content_type: application/octet-stream
