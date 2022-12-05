@@ -576,7 +576,11 @@ int main(int argc, char** argv)
     
     if (programArgs.is_used("--cookies-path")) {
         auto user_provided_cookies_path = programArgs.get<std::string>("--cookies-path");
-        memcpy_s(cookies_path, PATH_MAX, user_provided_cookies_path.c_str(), user_provided_cookies_path.size());
+        if (user_provided_cookies_path.size() > PATH_MAX) {
+            std::cerr << "Path lenght should be less than " << PATH_MAX << std::endl;
+            exit(-1);
+        }
+        memcpy(cookies_path, user_provided_cookies_path.c_str(), user_provided_cookies_path.size());
     }
     else {
         snprintf(cookies_path, PATH_MAX, CHROME_COOKIES_PATH, username);
