@@ -23,9 +23,10 @@
 #elif __APPLE_
     #define ITERATION     1003 
 #elif __linux__
+    #define __STDC_WANT_LIB_EXT1__ 1 // memcpy_s
     #define ITERATION     1 
     #include <libsecret/secret.h>
-    #include <string>
+    #include <string.h>
     #include <list>
 #endif // _WIN32
 
