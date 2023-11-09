@@ -24,6 +24,6 @@ It must be run on the same system you want to decrypt the cookies from
 
 
 ## Compilation
-The project uses Github Actions as CI to build the tool. Check the action files to see compile instructions. 
+The project uses Github Actions as CI to build the tool. Check the action files to see compile instructions.
 
 
